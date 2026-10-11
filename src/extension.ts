@@ -47,7 +47,8 @@ function agentFolder(prefix: string, name: string): string {
 /**
  * An invisible prefix unique to one agent in one group. Every folder level under the agent
  * carries it, so the icon theme's rules for this agent's folders can't match any other folder,
- * real or another agent's.
+ * real or another agent's. (VS Code sorts the agents by name: its collator skips these marks,
+ * and the characters it doesn't skip all take up visible space.)
  */
 function folderMark(n: number): string {
   let digits = '';
@@ -57,14 +58,12 @@ function folderMark(n: number): string {
 
 /** Colors each agent's file rows and shows A/M/D in the agent's color. */
 class AgentDecorations implements vscode.FileDecorationProvider {
-  /** Called the first time one of our rows is drawn, i.e. once the Source Control panel is open. */
-  onRowDrawn: (() => void) | undefined;
+  /** Run the first time one of our rows is drawn, i.e. once the Source Control panel is open. */
+  readonly onFirstRow: Array<() => void> = [];
 
   provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {
     if (uri.scheme !== 'file' || !uri.query.startsWith(DECORATION_QUERY)) return undefined;
-    const drawn = this.onRowDrawn;
-    this.onRowDrawn = undefined;
-    drawn?.();
+    for (const fn of this.onFirstRow.splice(0)) fn();
     const q = new URLSearchParams(uri.query);
     const raw = q.get(DECORATION_QUERY) ?? '-1';
     const color = raw === 'none' ? undefined : new vscode.ThemeColor(styleOf(Number(raw)).color);
@@ -614,7 +613,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Switch to tree view once, so agents show as dropdowns without hunting for the menu. VS Code
   // ignores the command while the Source Control panel is closed, so wait until it draws a row.
   if (!context.globalState.get('agentChanges.treeViewOnce')) {
-    decorations.onRowDrawn = () =>
+    decorations.onFirstRow.push(() =>
       setTimeout(async () => {
         try {
           await showAsTree();
@@ -622,8 +621,11 @@ export async function activate(context: vscode.ExtensionContext) {
         } catch (e) {
           output.appendLine(`could not switch Source Control to tree view: ${e}`);
         }
-      }, 300);
+      }, 300),
+    );
   }
+  // Offer the agent dots once agents are on screen, where the folder icons they replace show.
+  decorations.onFirstRow.push(() => setTimeout(() => void iconTheme.offer().catch((e) => output.appendLine(`icon theme: ${e}`)), 1500));
   return { manager };
 }
 

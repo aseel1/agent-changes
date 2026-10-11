@@ -6,6 +6,9 @@
 // folder. Agent folder names start with an invisible character, so the rules never match a real
 // folder. The theme is registered with `_watch` (as vscode-icons does), so VS Code reloads it
 // when Agent Changes rewrites it for new agents.
+//
+// Switching someone's icon theme is their call, so nothing changes until they answer the
+// one-time offer (or set agentChanges.agentFolderIcons themselves).
 
 import * as fs from 'fs';
 import * as os from 'os';
@@ -17,6 +20,8 @@ export const ICON_THEME_ID = 'agent-changes-icons';
 export const AGENT_FOLDER_MARK = '\u200b';
 /** Remembered so the uninstall script can put the user's own icon theme back. */
 export const BASE_THEME_FILE = path.join(os.homedir(), '.claude', 'agent-changes', 'base-icon-theme');
+/** Set once the user answered the offer to show agent dots. */
+const OFFERED = 'agentChanges.offeredFolderIcons';
 
 /** Dot colors, in palette order, then unattributed and mixed. Dark and light variants. */
 const DOTS: Array<[string, string]> = [
@@ -47,8 +52,15 @@ export class AgentIconTheme {
     this.file = context.asAbsolutePath(path.join('themes', 'agent-changes-icon-theme.json'));
   }
 
+  /** What the user chose in agentChanges.agentFolderIcons; undefined until they choose. */
+  private get choice(): boolean | undefined {
+    const setting = vscode.workspace.getConfiguration('agentChanges').inspect<boolean>('agentFolderIcons');
+    return setting?.workspaceFolderValue ?? setting?.workspaceValue ?? setting?.globalValue;
+  }
+
+  /** Whether the dotted theme is wanted: chosen, or (from before the offer existed) already on. */
   private get enabled(): boolean {
-    return vscode.workspace.getConfiguration('agentChanges').get<boolean>('agentFolderIcons', true);
+    return this.choice ?? vscode.workspace.getConfiguration('workbench').get('iconTheme') === ICON_THEME_ID;
   }
 
   /** Puts the right icon theme in place. Called on activation and when either setting changes. */
@@ -57,6 +69,10 @@ export class AgentIconTheme {
     const current = workbench.get<string | null>('iconTheme');
     if (!this.enabled) {
       if (current === ICON_THEME_ID) await workbench.update('iconTheme', this.base(), vscode.ConfigurationTarget.Global);
+      return;
+    }
+    if (this.choice === undefined) {
+      this.write(true); // already on from an earlier version: keep it current, switch nothing
       return;
     }
     if (current === null) return; // file icons are switched off; nothing to put dots into
@@ -72,6 +88,27 @@ export class AgentIconTheme {
     if (current !== ICON_THEME_ID) await workbench.update('iconTheme', ICON_THEME_ID, vscode.ConfigurationTarget.Global);
   }
 
+  /**
+   * Asks, once, whether to show agent dots. Answering sets agentChanges.agentFolderIcons, which
+   * makes apply() switch (or not). Closing the message without answering asks again next time.
+   */
+  async offer(): Promise<void> {
+    if (this.choice !== undefined || this.context.globalState.get(OFFERED)) return;
+    const current = vscode.workspace.getConfiguration('workbench').get<string | null>('iconTheme');
+    if (current === null || current === ICON_THEME_ID) return;
+    const yes = 'Show Dots';
+    const answer = await vscode.window.showInformationMessage(
+      `Agent Changes: show each agent's colored dot in Source Control instead of a folder icon? ` +
+        `VS Code takes folder icons from the file icon theme, so this switches to a copy of ` +
+        `${themeLabel(current ?? 'vs-seti')} with the dots added. Everything else looks the same.`,
+      yes,
+      'Keep Folder Icons',
+    );
+    if (!answer) return;
+    await this.context.globalState.update(OFFERED, true);
+    await vscode.workspace.getConfiguration('agentChanges').update('agentFolderIcons', answer === yes, vscode.ConfigurationTarget.Global);
+  }
+
   /** The agent folder names on screen, with their dot colors. */
   setFolders(folders: Map<string, DotColor>): void {
     if (folders.size === this.folders.size && [...folders].every(([k, v]) => this.folders.get(k) === v)) return;
@@ -84,7 +121,13 @@ export class AgentIconTheme {
   }
 
   private base(): string {
-    return this.context.globalState.get<string>('agentChanges.baseIconTheme') ?? 'vs-seti';
+    const remembered = this.context.globalState.get<string>('agentChanges.baseIconTheme');
+    if (remembered) return remembered;
+    try {
+      return fs.readFileSync(BASE_THEME_FILE, 'utf8').trim() || 'vs-seti'; // shared across installs
+    } catch {
+      return 'vs-seti';
+    }
   }
 
   private write(force: boolean): void {
@@ -153,6 +196,16 @@ function findIconThemeFile(id: string): string | undefined {
     }
   }
   return undefined;
+}
+
+/** The theme's name as the icon theme picker shows it. */
+function themeLabel(id: string): string {
+  for (const ext of vscode.extensions.all) {
+    for (const theme of ext.packageJSON?.contributes?.iconThemes ?? []) {
+      if (theme.id === id && typeof theme.label === 'string' && !theme.label.startsWith('%')) return `"${theme.label}"`;
+    }
+  }
+  return 'your icon theme';
 }
 
 function writeDot(file: string, color: DotColor, light: boolean): void {

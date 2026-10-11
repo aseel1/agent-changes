@@ -2,14 +2,35 @@
   "name": "agent-changes",
   "displayName": "Agent Changes",
   "description": "See each Claude Code agent's changes as its own group in Source Control, on one branch and one working tree.",
-  "version": "0.14.0",
-  "publisher": "local-dev",
+  "version": "0.15.0",
+  "publisher": "aseel1",
+  "icon": "media/icon.png",
+  "preview": true,
   "license": "MIT",
+  "author": "Aseel Shaheen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aseel1/agent-changes.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aseel1/agent-changes/issues"
+  },
+  "homepage": "https://github.com/aseel1/agent-changes#readme",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
     "SCM Providers"
+  ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "ai agents",
+    "subagents",
+    "multi-agent",
+    "source control",
+    "git",
+    "staging"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -366,8 +387,8 @@
       "properties": {
         "agentChanges.agentFolderIcons": {
           "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show each agent's colored dot instead of a folder icon. VS Code takes folder icons from the file icon theme, so Agent Changes switches your icon theme to a copy of the one you use with these dots added. Turn off to go back to your own theme."
+          "default": false,
+          "markdownDescription": "Show each agent's colored dot in Source Control instead of a folder icon. VS Code takes folder icons from the file icon theme, so this switches your icon theme to a copy of the one you use with the dots added. Agent Changes asks once, the first time agents appear; uncheck to go back to your own theme."
         }
       }
     },
@@ -384,7 +405,7 @@
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
     "test": "tsc -p . && node --test \"out/test/*.test.js\"",
-    "package": "tsc -p . && vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "package": "tsc -p . && vsce package --no-dependencies",
     "vscode:uninstall": "node ./out/uninstall.js"
   },
   "devDependencies": {

@@ -5,3 +5,5 @@ tsconfig.json
 .gitignore
 node_modules/**
 themes/dots/**
+media/**
+!media/icon.png
