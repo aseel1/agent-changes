@@ -1,0 +1,396 @@
+{
+  "name": "agent-changes",
+  "displayName": "Agent Changes",
+  "description": "See each Claude Code agent's changes as its own group in Source Control, on one branch and one working tree.",
+  "version": "0.14.0",
+  "publisher": "local-dev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "agentChanges.enable",
+        "title": "Enable for This Repository",
+        "category": "Agent Changes"
+      },
+      {
+        "command": "agentChanges.refresh",
+        "title": "Refresh",
+        "category": "Agent Changes",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "agentChanges.reset",
+        "title": "Reset Tracking (forget who changed what)",
+        "category": "Agent Changes",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "agentChanges.commit",
+        "title": "Commit Staged",
+        "category": "Agent Changes",
+        "icon": "$(check)"
+      },
+      {
+        "command": "agentChanges.openDiff",
+        "title": "Open This Agent's Changes",
+        "category": "Agent Changes",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "agentChanges.openFile",
+        "title": "Open File",
+        "category": "Agent Changes",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "agentChanges.stageFile",
+        "title": "Stage Changes",
+        "category": "Agent Changes",
+        "icon": "$(add)"
+      },
+      {
+        "command": "agentChanges.revertFile",
+        "title": "Discard Changes…",
+        "category": "Agent Changes",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "agentChanges.unstage",
+        "title": "Unstage Changes",
+        "category": "Agent Changes",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "agentChanges.unstageAll",
+        "title": "Unstage All Changes",
+        "category": "Agent Changes",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "agentChanges.stageAll",
+        "title": "Stage All Changes",
+        "category": "Agent Changes",
+        "icon": "$(add)"
+      },
+      {
+        "command": "agentChanges.discardAll",
+        "title": "Discard All Changes",
+        "category": "Agent Changes",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "agentChanges.showAsTree",
+        "title": "Show Agents as Dropdowns (Tree View)",
+        "category": "Agent Changes",
+        "icon": "$(list-tree)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "agentChanges.showAsTree",
+          "group": "navigation@0",
+          "when": "scmProvider == agentChanges"
+        },
+        {
+          "command": "agentChanges.commit",
+          "group": "navigation@1",
+          "when": "scmProvider == agentChanges"
+        },
+        {
+          "command": "agentChanges.refresh",
+          "group": "navigation@2",
+          "when": "scmProvider == agentChanges"
+        },
+        {
+          "command": "agentChanges.reset",
+          "group": "1_tracking",
+          "when": "scmProvider == agentChanges"
+        }
+      ],
+      "scm/resourceGroup/context": [
+        {
+          "command": "agentChanges.discardAll",
+          "group": "inline@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.stageAll",
+          "group": "inline@2",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.stageAll",
+          "group": "1_stage@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.discardAll",
+          "group": "2_discard@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.unstageAll",
+          "group": "inline@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        },
+        {
+          "command": "agentChanges.unstageAll",
+          "group": "1_stage@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "agentChanges.openFile",
+          "group": "inline@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.revertFile",
+          "group": "inline@2",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.stageFile",
+          "group": "inline@3",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.openDiff",
+          "group": "1_open@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.openFile",
+          "group": "1_open@2",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.stageFile",
+          "group": "2_stage@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.revertFile",
+          "group": "3_discard",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.openFile",
+          "group": "inline@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        },
+        {
+          "command": "agentChanges.unstage",
+          "group": "inline@2",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        },
+        {
+          "command": "agentChanges.openDiff",
+          "group": "1_open@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        },
+        {
+          "command": "agentChanges.openFile",
+          "group": "1_open@2",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        },
+        {
+          "command": "agentChanges.unstage",
+          "group": "2_stage@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "agentChanges.openDiff",
+          "when": "false"
+        },
+        {
+          "command": "agentChanges.openFile",
+          "when": "false"
+        },
+        {
+          "command": "agentChanges.stageFile",
+          "when": "false"
+        },
+        {
+          "command": "agentChanges.revertFile",
+          "when": "false"
+        },
+        {
+          "command": "agentChanges.stageAll",
+          "when": "false"
+        },
+        {
+          "command": "agentChanges.unstage",
+          "when": "false"
+        },
+        {
+          "command": "agentChanges.unstageAll",
+          "when": "false"
+        },
+        {
+          "command": "agentChanges.discardAll",
+          "when": "false"
+        }
+      ],
+      "scm/resourceFolder/context": [
+        {
+          "command": "agentChanges.revertFile",
+          "group": "inline@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.stageFile",
+          "group": "inline@2",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.stageFile",
+          "group": "1_stage@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.revertFile",
+          "group": "2_discard",
+          "when": "scmProvider == agentChanges && scmResourceGroup == changes"
+        },
+        {
+          "command": "agentChanges.unstage",
+          "group": "inline@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        },
+        {
+          "command": "agentChanges.unstage",
+          "group": "1_stage@1",
+          "when": "scmProvider == agentChanges && scmResourceGroup == staged"
+        }
+      ]
+    },
+    "colors": [
+      {
+        "id": "agentChanges.blue",
+        "description": "File names of the agent shown with the blue dot in Agent Changes.",
+        "defaults": {
+          "dark": "#4FA3F7",
+          "light": "#1F6FD1",
+          "highContrast": "#4FA3F7",
+          "highContrastLight": "#1F6FD1"
+        }
+      },
+      {
+        "id": "agentChanges.green",
+        "description": "File names of the agent shown with the green dot in Agent Changes.",
+        "defaults": {
+          "dark": "#7DC35B",
+          "light": "#3C8A1E",
+          "highContrast": "#7DC35B",
+          "highContrastLight": "#3C8A1E"
+        }
+      },
+      {
+        "id": "agentChanges.purple",
+        "description": "File names of the agent shown with the purple dot in Agent Changes.",
+        "defaults": {
+          "dark": "#B392F0",
+          "light": "#7B4FC9",
+          "highContrast": "#B392F0",
+          "highContrastLight": "#7B4FC9"
+        }
+      },
+      {
+        "id": "agentChanges.orange",
+        "description": "File names of the agent shown with the orange dot in Agent Changes.",
+        "defaults": {
+          "dark": "#F5A043",
+          "light": "#C26100",
+          "highContrast": "#F5A043",
+          "highContrastLight": "#C26100"
+        }
+      },
+      {
+        "id": "agentChanges.yellow",
+        "description": "File names of the agent shown with the yellow dot in Agent Changes.",
+        "defaults": {
+          "dark": "#E8C547",
+          "light": "#9A7B00",
+          "highContrast": "#E8C547",
+          "highContrastLight": "#9A7B00"
+        }
+      },
+      {
+        "id": "agentChanges.red",
+        "description": "File names of the agent shown with the red dot in Agent Changes.",
+        "defaults": {
+          "dark": "#F0646E",
+          "light": "#C62C3A",
+          "highContrast": "#F0646E",
+          "highContrastLight": "#C62C3A"
+        }
+      },
+      {
+        "id": "agentChanges.brown",
+        "description": "File names of the agent shown with the brown dot in Agent Changes.",
+        "defaults": {
+          "dark": "#C98E6B",
+          "light": "#8A5232",
+          "highContrast": "#C98E6B",
+          "highContrastLight": "#8A5232"
+        }
+      },
+      {
+        "id": "agentChanges.unattributed",
+        "description": "File names of unattributed changes in Agent Changes.",
+        "defaults": {
+          "dark": "#A0A0A0",
+          "light": "#6E6E6E",
+          "highContrast": "#C0C0C0",
+          "highContrastLight": "#5A5A5A"
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Agent Changes",
+      "properties": {
+        "agentChanges.agentFolderIcons": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show each agent's colored dot instead of a folder icon. VS Code takes folder icons from the file icon theme, so Agent Changes switches your icon theme to a copy of the one you use with these dots added. Turn off to go back to your own theme."
+        }
+      }
+    },
+    "iconThemes": [
+      {
+        "id": "agent-changes-icons",
+        "label": "Your Icon Theme + Agent Changes Dots",
+        "path": "./themes/agent-changes-icon-theme.json",
+        "_watch": true
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "test": "tsc -p . && node --test \"out/test/*.test.js\"",
+    "package": "tsc -p . && vsce package --no-dependencies --allow-missing-repository --skip-license",
+    "vscode:uninstall": "node ./out/uninstall.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.5.0"
+  }
+}
