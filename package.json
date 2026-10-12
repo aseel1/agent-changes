@@ -1,8 +1,8 @@
 {
   "name": "agent-changes",
   "displayName": "Agent Changes",
-  "description": "See each Claude Code agent's changes as its own group in Source Control, on one branch and one working tree.",
-  "version": "0.15.0",
+  "description": "Groups your uncommitted changes by the Claude Code agent that made them, so you can review, commit or discard each agent's work separately in Source Control.",
+  "version": "0.15.1",
   "publisher": "aseel1",
   "icon": "media/icon.png",
   "preview": true,
@@ -111,7 +111,7 @@
       },
       {
         "command": "agentChanges.showAsTree",
-        "title": "Show Agents as Dropdowns (Tree View)",
+        "title": "Show Agents as Groups (Tree View)",
         "category": "Agent Changes",
         "icon": "$(list-tree)"
       }

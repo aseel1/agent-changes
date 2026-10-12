@@ -1,12 +1,11 @@
 <p align="center">
-  <img src="media/icon.png" alt="Agent Changes logo" width="96">
+  <img src="media/logo.png" alt="Agent Changes" width="280">
 </p>
 
-<h1 align="center">Agent Changes</h1>
-
 <p align="center">
-  <b>See what each Claude Code agent changed, on its own, right in VS Code's Source Control.</b><br>
-  One branch, one working tree, and every agent's work kept apart.
+  <b>Running several Claude Code agents in one project? Source Control shows each agent's changes separately,<br>
+  so you can review, commit or undo them one agent at a time.</b><br>
+  No extra branches or worktrees: every agent keeps working in the same folder.
 </p>
 
 <p align="center">
@@ -19,30 +18,40 @@
 </p>
 
 <p align="center">
-  <img src="media/overview.png" alt="Source Control with one dropdown per agent. Clicking app.js under 'Add dark mode' shows only that agent's change." width="900">
+  <img src="media/overview.png" alt="Source Control with a group per agent. Clicking app.js under 'Add dark mode' shows only that agent's change." width="900">
 </p>
 
 ---
 
+## What it does
+
+When several Claude Code agents work in the same project, VS Code's Source Control shows all of their edits in one mixed list. **Agent Changes** sorts that list by agent. Each agent gets its own collapsible group holding only the files, and only the lines, that agent changed. From there you can review, stage, commit or discard one agent's work without touching the others.
+
+An **agent** is a Claude Code session (one chat, in the terminal or in the VS Code extension) or a subagent that session started.
+
 ## Why
 
-Run a few Claude Code agents at once (a main session, its subagents, a second session in another terminal) and they all edit the same files on the same branch. Git's **Changes** list mixes everything together: you can't tell which agent did what, review one agent's work, or commit it on its own.
+Say you ask Claude to add a dark mode, and it hands the tests to a subagent. Meanwhile, in a second chat, another Claude session fixes the date formatting. All three edit your project at the same time, on the same branch, sometimes in the same file.
 
-**Agent Changes** adds a Source Control view that files every change under the agent that made it. Nothing is copied or moved: same branch, same files on disk, no worktrees.
+Without Agent Changes, Source Control shows one list of modified files, and a file two agents touched shows both agents' edits in a single diff. You can't tell which agent changed what, review one task on its own, or commit one task and leave the rest for later.
+
+The usual answer is a separate copy of the project for each agent (a Git worktree). Agent Changes keeps one folder and one branch, and tells the agents' edits apart instead.
 
 ## Features
 
-- 🗂️ **One dropdown per agent.** Main sessions are named after their Claude Code session and follow `/rename` live. Subagents are named after their task. Each agent gets its own color.
-- 🔍 **Only that agent's lines.** Click a file to diff the committed version against just that agent's edits, even when several agents changed the same file.
-- ✅ **Stage, commit and discard per agent.** Commit agent by agent, or throw away one agent's work and keep everyone else's.
-- 🧹 **Discard All, Git-style.** Clears everything under Changes in one click; what you staged stays.
-- 🙋 **Unattributed group.** Your own edits and tools outside Claude land in their own group, so nothing is hidden.
-- 🔒 **Local only.** No network, no telemetry. Tracking data lives in `.git/agent-changes/` and is never committed.
+- 🗂️ **A group per agent.** Under **Changes**, each agent's files sit in their own collapsible group, marked with the agent's color. A session's group carries the session's title and follows renames. A subagent's group is named after the task it was given.
+- 🔍 **Only that agent's lines.** Click a file to compare the last commit with that agent's edits alone, even when other agents changed the same file.
+- ✅ **Stage, commit or discard one agent's work.** The buttons on an agent's group, or on one of its files, act on that agent's edits only. Everyone else's stay as they are. Commit with the usual message box.
+- 🧹 **Discard All.** One button on **Changes** throws away everything that isn't staged, just like Git's. What you staged is kept.
+- 🙋 **Nothing goes missing.** Edits no agent made (your own typing, a formatter, a build step) appear in an **Unattributed** group.
+- 🔒 **Local only.** No network, no telemetry. The record of who changed what lives in `.git/agent-changes/`, which Git never commits.
+
+Two agents edited the same `app.js`. Clicking it under each agent shows only that agent's change:
 
 <table>
   <tr>
-    <th>The same <code>app.js</code>, under <i>Add dark mode</i></th>
-    <th>…and under <i>Fix date formatting</i></th>
+    <th>Under <i>Add dark mode</i>: only the theme toggle</th>
+    <th>Under <i>Fix date formatting</i>: only the sorting</th>
   </tr>
   <tr>
     <td><img src="media/diff-dark-mode.png" alt="app.js diff showing only the dark mode toggle"></td>
@@ -99,7 +108,7 @@ code --install-extension agent-changes-<version>.vsix
 4. **Open Source Control** (`Ctrl+Shift+G`) and use Claude as usual. Each agent's changes appear under **Agent Changes** as they happen. The first time, you'll be asked whether to show [colored dots](#the-colored-dots) for agents.
 
 > [!TIP]
-> Agents appear as dropdowns when Source Control is in **tree view**. Agent Changes switches to it the first time it runs. If you see a flat list, click the tree button in the Agent Changes title bar.
+> Agents appear as groups only when Source Control is in **tree view**. Agent Changes switches to it the first time it runs. If you see a flat list, click the tree button in the Agent Changes title bar.
 
 <details>
 <summary><b>What does "Enable for This Repository" change?</b></summary>
@@ -175,7 +184,7 @@ You can change your mind any time with the `agentChanges.agentFolderIcons` setti
 </details>
 
 <details>
-<summary><b>I see a flat list instead of one dropdown per agent</b></summary>
+<summary><b>I see a flat list instead of a group per agent</b></summary>
 <br>
 
 Switch Source Control to tree view: click the tree button in the Agent Changes title bar, or `…` → **View & Sort** → **View as Tree**.
@@ -218,8 +227,8 @@ Session renames and generated titles are written to the session transcript witho
 - Two agents running **shell commands at the same moment** can't be told apart. Files those commands change show as Unattributed.
 - Changes made by **background processes** an agent started show as Unattributed.
 - **Binary files** and files over 8 MB are credited whole to their last writer.
-- Agents still **share one working tree**: an agent running a build or tests sees the other agents' half-finished edits. Use worktrees when that matters.
-- VS Code sorts the agent dropdowns **alphabetically**, not by when each agent started.
+- Agents still **share one folder**: an agent running a build or tests sees the other agents' half-finished edits. Use worktrees when that matters.
+- VS Code sorts the agent groups **alphabetically**, not by when each agent started.
 - This is a **preview**, tested mostly on **Windows**. macOS and Linux should work, and reports are welcome.
 
 ## Uninstall
