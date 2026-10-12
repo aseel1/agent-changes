@@ -69,7 +69,7 @@ Two agents edited the same `app.js`. Clicking it under each agent shows only tha
 | **VS Code** | 1.90 or later |
 | **Claude Code** | the CLI or the VS Code extension (tested with 2.1.x) |
 | **Git** | the project must be a Git repository |
-| **Node.js** | 18 or later, available as `node` on your PATH (the Claude Code hook runs with it) |
+| **Node.js** | 18 or later, available as `node` on your PATH (the Claude Code hook runs with it). Agent Changes tells you when you turn it on if it can't find it. |
 
 ## Installation
 
@@ -106,7 +106,7 @@ code --install-extension agent-changes-<version>.vsix
 ## Quick start
 
 1. **Open your project** (a Git repository) in VS Code.
-2. **Turn it on for the repository:** open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run **Agent Changes: Enable for This Repository**.
+2. **Turn it on for the repository:** if Claude Code has been used in the project, Agent Changes asks whether to turn it on. Click **Enable**. You can also turn it on any time from the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) with **Agent Changes: Enable for This Repository**.
 3. **Restart Claude Code sessions** already running in that repository so they load the hook. New sessions pick it up automatically.
 4. **Open Source Control** (`Ctrl+Shift+G`) and use Claude as usual. Each agent's changes appear under **Agent Changes** as they happen. The first time, you'll be asked whether to show [colored dots](#the-colored-dots) for agents.
 
@@ -120,6 +120,7 @@ code --install-extension agent-changes-<version>.vsix
 - Creates `.git/agent-changes/`, where all tracking data lives. It sits inside `.git`, so it is never committed.
 - Copies the hook script, and the guard and `cli.js` it uses, to `~/.claude/agent-changes/`.
 - Adds the hook to `<repo>/.claude/settings.local.json`, Claude Code's personal settings file for the project. Your existing settings are kept.
+- Makes sure Git ignores that file. Claude Code usually takes care of this already; if not, the file is added to `.git/info/exclude`, so it never shows up as a change.
 
 The hook records nothing in repositories where `.git/agent-changes/` doesn't exist, so you can also register it once in `~/.claude/settings.json` to cover Claude sessions started from any folder.
 </details>

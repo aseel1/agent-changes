@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { hookDestination, installHookSettings, syncHookFiles } from './engine/install';
+import { claudeUsedIn, hookDestination, ignoreHookSettings, installHookSettings, MIN_NODE, nodeMajor, syncHookFiles } from './engine/install';
 import { toDisplay } from './engine/lines';
 import { FileEntry, OwnerInfo, Snapshot, StagedConflict, StagedItem, Tracker } from './engine/tracker';
 import { AGENT_FOLDER_MARK, AgentIconTheme, DotColor } from './iconTheme';
@@ -13,6 +13,8 @@ const SCHEME = 'agent-changes';
 const DECORATION_QUERY = 'agent-changes-color';
 /** Owner value in content URIs that asks for the staged (index) version. */
 const INDEX = '@index';
+/** Global state: repositories where the user said not to offer turning Agent Changes on. */
+const DECLINED = 'agentChanges.declinedRepos';
 
 /** One dot and one theme color (contributed in package.json) per agent. */
 const PALETTE = [
@@ -578,6 +580,30 @@ export async function activate(context: vscode.ExtensionContext) {
     await view.refresh();
   });
 
+  /** Turns tracking on for a repository and registers the hook with Claude Code there. */
+  const enable = async (tracker: Tracker, folderPath: string) => {
+    tracker.enable();
+    syncHookFiles(context.extensionPath);
+    const { file: settingsFile } = installHookSettings(tracker.root);
+    await ignoreHookSettings(tracker.root).catch((e) => output.appendLine(`could not git-ignore ${settingsFile}: ${e}`));
+    if (!manager.views.has(tracker.root)) manager.add(tracker, folderPath);
+    const name = path.basename(tracker.root);
+    const node = await nodeMajor();
+    if (node >= MIN_NODE) {
+      void vscode.window.showInformationMessage(
+        `Agent Changes is on for ${name}. The Claude Code hook is in ${path.relative(tracker.root, settingsFile)}; restart Claude Code sessions in this repository so they pick it up.`,
+      );
+      return;
+    }
+    // Claude Code starts the hook with "node"; without it nothing is recorded, and nothing says why.
+    const found = node ? `found Node.js ${node}, and the hook needs ${MIN_NODE} or later` : `the hook runs with Node.js, and the "node" command wasn't found`;
+    const choice = await vscode.window.showWarningMessage(
+      `Agent Changes is on for ${name}, but Claude Code can't record changes yet: ${found}. Install Node.js ${MIN_NODE} or later, then restart VS Code and your Claude Code sessions.`,
+      'Get Node.js',
+    );
+    if (choice) void vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/en/download'));
+  };
+
   command('agentChanges.enable', async () => {
     const trackers: Array<Tracker & { folder?: string }> = [];
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
@@ -597,17 +623,36 @@ export async function activate(context: vscode.ExtensionContext) {
       if (!pick) return;
       tracker = pick.t;
     }
-    tracker.enable();
-    syncHookFiles(context.extensionPath);
-    const { file: settingsFile } = installHookSettings(tracker.root);
-    if (!manager.views.has(tracker.root)) manager.add(tracker, tracker.folder ?? tracker.root);
-    void vscode.window.showInformationMessage(
-      `Agent Changes is on for ${path.basename(tracker.root)}. The Claude Code hook is in ${path.relative(tracker.root, settingsFile)}; restart Claude Code sessions in this repository so they pick it up.`,
-    );
+    await enable(tracker, tracker.folder ?? tracker.root);
   });
 
-  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void manager.scan()));
+  // Offer to turn it on in repositories where Claude Code is in use, until the user answers.
+  const offered = new Set<string>();
+  const offerToEnable = async () => {
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      const tracker = await Tracker.open(folder.uri.fsPath);
+      if (!tracker || tracker.enabled || offered.has(tracker.root)) continue;
+      offered.add(tracker.root);
+      const declined = context.globalState.get<string[]>(DECLINED, []);
+      if (declined.includes(tracker.root) || !claudeUsedIn([tracker.root, folder.uri.fsPath])) continue;
+      const choice = await vscode.window.showInformationMessage(
+        `Claude Code is used in ${path.basename(tracker.root)}. Show each Claude agent's changes as its own group in Source Control?`,
+        'Enable',
+        "Don't Ask Again",
+      );
+      if (choice === 'Enable') await enable(tracker, folder.uri.fsPath);
+      else if (choice) await context.globalState.update(DECLINED, [...declined, tracker.root]);
+    }
+  };
+  const offer = () =>
+    void offerToEnable().catch((e) => {
+      output.appendLine(`[${new Date().toISOString()}] enable: ${(e as Error).stack ?? e}`);
+      void vscode.window.showErrorMessage(`Agent Changes: ${(e as Error).message ?? e}`);
+    });
+
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void manager.scan().then(offer)));
   await manager.scan();
+  offer();
 
   // Switch to tree view once, so agents show as dropdowns without hunting for the menu. VS Code
   // ignores the command while the Source Control panel is closed, so wait until it draws a row.

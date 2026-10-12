@@ -6,9 +6,11 @@
 // it loads before git commands, the command agents run to act on their own changes (cli.js),
 // and the engine both of them use.
 
+import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { git, GitError } from './git';
 
 export const HOOK_FILE = 'agent-changes-hook.js';
 
@@ -24,12 +26,46 @@ const HOOKS: Record<string, string | undefined> = {
   SessionEnd: undefined,
 };
 
+/** The oldest Node.js the hook runs on. */
+export const MIN_NODE = 18;
+
 export function hookDir(home = os.homedir()): string {
   return path.join(home, '.claude', 'agent-changes');
 }
 
 export function hookDestination(home = os.homedir()): string {
   return path.join(hookDir(home), HOOK_FILE);
+}
+
+/**
+ * The major version of the `node` that Claude Code will start the hook with (the one on PATH),
+ * or 0 if there is none.
+ */
+export function nodeMajor(): Promise<number> {
+  return new Promise((resolve) =>
+    execFile('node', ['--version'], { timeout: 10000, windowsHide: true }, (err, stdout) =>
+      resolve(err ? 0 : Number(/^v(\d+)/.exec(String(stdout).trim())?.[1] ?? 0)),
+    ),
+  );
+}
+
+/**
+ * Whether Claude Code looks to be in use in any of these folders: they have Claude Code project
+ * settings or a CLAUDE.md, or Claude Code keeps session history for them (in
+ * ~/.claude/projects/, named after the folder with every other character turned into "-").
+ */
+export function claudeUsedIn(dirs: string[], configDir = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude')): boolean {
+  if (dirs.some((d) => fs.existsSync(path.join(d, '.claude')) || fs.existsSync(path.join(d, 'CLAUDE.md')))) return true;
+  let projects: string[];
+  try {
+    projects = fs.readdirSync(path.join(configDir, 'projects'));
+  } catch {
+    return false;
+  }
+  // The drive letter's case depends on who started the session.
+  const fold = (name: string) => (process.platform === 'win32' ? name.toLowerCase() : name);
+  const known = new Set(projects.map(fold));
+  return dirs.some((d) => known.has(fold(d.replace(/[^a-zA-Z0-9]/g, '-'))));
 }
 
 /**
@@ -107,4 +143,26 @@ export function installHookSettings(repoRoot: string, hookPath = hookDestination
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
   return { file, changed: true };
+}
+
+/**
+ * Keeps the settings file the hook is registered in out of commits. Claude Code usually ignores
+ * it globally once it has written one itself; until then it goes in this repository's
+ * .git/info/exclude, which is never committed either.
+ */
+export async function ignoreHookSettings(repoRoot: string): Promise<void> {
+  const file = '.claude/settings.local.json';
+  try {
+    await git(repoRoot, ['check-ignore', '-q', file]);
+    return; // already ignored
+  } catch (e) {
+    if (!(e instanceof GitError && e.code === 1)) return;
+  }
+  const exclude = path.resolve(repoRoot, (await git(repoRoot, ['rev-parse', '--git-path', 'info/exclude'])).toString('utf8').trim());
+  let text = '';
+  try {
+    text = fs.readFileSync(exclude, 'utf8');
+  } catch {}
+  fs.mkdirSync(path.dirname(exclude), { recursive: true });
+  fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}/${file}\n`);
 }

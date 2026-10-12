@@ -2,7 +2,7 @@
   "name": "agent-changes",
   "displayName": "Agent Changes",
   "description": "Groups your uncommitted changes by the Claude Code agent that made them, so you can review, commit or discard each agent's work separately in Source Control.",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "publisher": "aseel1",
   "icon": "media/icon.png",
   "preview": true,
