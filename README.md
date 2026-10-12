@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://marketplace.visualstudio.com/items?itemName=aseel1.agent-changes"><img alt="VS Code Marketplace" src="https://img.shields.io/badge/VS_Code_Marketplace-install-007ACC"></a>
   <img alt="Preview" src="https://img.shields.io/badge/status-preview-E8C547">
   <img alt="VS Code 1.90+" src="https://img.shields.io/badge/VS_Code-1.90%2B-007ACC">
   <img alt="For Claude Code" src="https://img.shields.io/badge/for-Claude_Code-D97757">
@@ -60,18 +61,27 @@ Run a few Claude Code agents at once (a main session, its subagents, a second se
 
 ## Installation
 
-### Option 1: download the extension (recommended)
+### Option 1: VS Code Marketplace (recommended)
+
+Open Extensions (`Ctrl+Shift+X`, or `Cmd+Shift+X` on macOS), search for **Agent Changes**, and click **Install**. Or install it from the [**Marketplace page**](https://marketplace.visualstudio.com/items?itemName=aseel1.agent-changes), or from a terminal:
+
+```bash
+code --install-extension aseel1.agent-changes
+```
+
+VS Code keeps it up to date from then on.
+
+### Option 2: download the `.vsix`
+
+For editors that don't use the VS Code Marketplace, or machines without internet access.
 
 1. Open the [**latest release**](https://github.com/aseel1/agent-changes/releases/latest) and download `agent-changes-<version>.vsix` under **Assets**.
-2. Install it, either:
-   - **from VS Code:** open Extensions (`Ctrl+Shift+X`, or `Cmd+Shift+X` on macOS), click **`…`** at the top of the panel, choose **Install from VSIX…**, and pick the downloaded file; or
-   - **from a terminal:**
-     ```bash
-     code --install-extension agent-changes-<version>.vsix
-     ```
-3. Reload VS Code if it asks.
+2. In Extensions, click **`…`** at the top of the panel, choose **Install from VSIX…**, and pick the downloaded file. Or from a terminal:
+   ```bash
+   code --install-extension agent-changes-<version>.vsix
+   ```
 
-### Option 2: build from source
+### Option 3: build from source
 
 ```bash
 git clone https://github.com/aseel1/agent-changes.git
