@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=aseel1.agent-changes"><img alt="VS Code Marketplace" src="https://img.shields.io/badge/VS_Code_Marketplace-install-007ACC"></a>
+  <a href="https://open-vsx.org/extension/aseel1/agent-changes"><img alt="Open VSX" src="https://img.shields.io/badge/Open_VSX-install-A60EE5"></a>
   <img alt="Preview" src="https://img.shields.io/badge/status-preview-E8C547">
   <img alt="VS Code 1.90+" src="https://img.shields.io/badge/VS_Code-1.90%2B-007ACC">
   <img alt="For Claude Code" src="https://img.shields.io/badge/for-Claude_Code-D97757">
@@ -83,7 +84,11 @@ code --install-extension aseel1.agent-changes
 
 VS Code keeps it up to date from then on.
 
-### Option 2: download the `.vsix`
+### Option 2: Cursor, Windsurf, VSCodium (Open VSX)
+
+These editors install extensions from Open VSX. Search their Extensions view for **Agent Changes** and click **Install**, or get it from the [**Open VSX page**](https://open-vsx.org/extension/aseel1/agent-changes). It is the same extension as on the Marketplace; it's tested mostly in VS Code, so reports from these editors are welcome.
+
+### Option 3: download the `.vsix`
 
 For editors that don't use the VS Code Marketplace, or machines without internet access.
 
@@ -93,7 +98,7 @@ For editors that don't use the VS Code Marketplace, or machines without internet
    code --install-extension agent-changes-<version>.vsix
    ```
 
-### Option 3: build from source
+### Option 4: build from source
 
 ```bash
 git clone https://github.com/aseel1/agent-changes.git
