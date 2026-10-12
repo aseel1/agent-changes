@@ -6,12 +6,17 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { installHookSettings } from '../engine/install';
+import { HOOK_FILE, installHookSettings, syncHookFiles } from '../engine/install';
 import { UNATTRIBUTED } from '../engine/model';
 import { Tracker } from '../engine/tracker';
 
-const HOOK = path.join(__dirname, '..', '..', 'hook', 'agent-changes-hook.js');
+// The hook runs from an install folder laid out the way the extension sets it up.
+const INSTALL = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-changes-install-'));
+syncHookFiles(path.join(__dirname, '..', '..'), INSTALL);
+const HOOK = path.join(INSTALL, HOOK_FILE);
+const CLI = path.join(INSTALL, 'cli.js');
 const SESSION = 'sess-1111-2222';
+const OTHER = 'sess-3333-4444';
 const MAIN = SESSION;
 const WRITER = `${SESSION}/agent-writer`;
 const SHELL = `${SESSION}/agent-shell`;
@@ -41,7 +46,7 @@ function hook(dir: string, payload: Record<string, unknown>) {
 }
 
 /** Runs `change` between a PreToolUse and a PostToolUse for one tool call. */
-function toolCall(dir: string, who: { agent_id?: string; agent_type?: string }, name: string, input: Record<string, unknown>, change: () => void) {
+function toolCall(dir: string, who: { agent_id?: string; agent_type?: string; session_id?: string }, name: string, input: Record<string, unknown>, change: () => void) {
   const id = `toolu_${++tool}`;
   const base = { ...who, tool_name: name, tool_input: input, tool_use_id: id };
   hook(dir, { ...base, hook_event_name: 'PreToolUse' });
@@ -230,6 +235,112 @@ test('the hook does nothing in repositories where tracking is off', () => {
   fs.rmSync(path.join(dir, '.git', 'agent-changes'), { recursive: true });
   edit(dir, {}, 'a.txt', 'line 2\n', 'line two\n');
   assert.equal(fs.existsSync(path.join(dir, '.git', 'agent-changes')), false);
+});
+
+test("the guard stops git commands that would take in or erase another session's work", () => {
+  const dir = setupRepo();
+  const other = { session_id: OTHER };
+  hook(dir, { ...other, hook_event_name: 'UserPromptSubmit', prompt: 'Fix the dates' });
+  edit(dir, {}, 'a.txt', 'line 2\n', 'line two\n'); // this session
+  edit(dir, writer, 'b.txt', 'alpha\n', 'ALPHA\n'); // this session's subagent: still its own work
+  edit(dir, other, 'a.txt', 'line 9\n', 'line nine\n'); // another session, same file
+  toolCall(dir, other, 'Write', { file_path: path.join(dir, 'notes.txt'), content: 'n\n' }, () => fs.writeFileSync(path.join(dir, 'notes.txt'), 'n\n'));
+  fs.mkdirSync(path.join(dir, 'sub'));
+
+  const pending = () => fs.readdirSync(path.join(dir, '.git', 'agent-changes', 'pending')).length;
+  const ask = (command: string, name = 'Bash') => {
+    const r = spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ cwd: dir, session_id: SESSION, hook_event_name: 'PreToolUse', tool_name: name, tool_input: { command }, tool_use_id: `toolu_${++tool}` }),
+      encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput : null;
+  };
+  const blocked = (command: string, name = 'Bash') => {
+    const before = pending();
+    const out = ask(command, name);
+    assert.equal(out?.permissionDecision, 'deny', `${command} should be blocked`);
+    assert.equal(pending(), before, 'a blocked command leaves nothing pending');
+    return out.permissionDecisionReason as string;
+  };
+  const allowed = (command: string) => assert.equal(ask(command), null, `${command} should run`);
+
+  const reason = blocked('git add -A');
+  assert.match(reason, /stage uncommitted work that another Claude session made/);
+  assert.match(reason, /"Fix the dates" \(another session\): a\.txt, notes\.txt/);
+  assert.match(reason, new RegExp(`cli\\.js" stage --session ${SESSION}`));
+  assert.match(blocked('git checkout -- .'), new RegExp(`cli\\.js" discard --session ${SESSION}`));
+  assert.match(blocked('git add -A', 'PowerShell'), /\$env:AGENT_CHANGES_ALLOW=1;/);
+  for (const command of [
+    'git add .',
+    'git add a.txt',
+    'cd sub && git add ..',
+    'git -C sub add -A',
+    'git status && git add -A && git commit -m "wip"',
+    'git commit -am "wip"',
+    'git commit -m wip a.txt',
+    'git checkout .',
+    'git checkout HEAD -- a.txt',
+    'git restore a.txt',
+    'git reset --hard',
+    'git stash',
+    'git stash push -u',
+    'git clean -fd',
+  ]) {
+    blocked(command);
+  }
+  for (const command of [
+    'git status',
+    'git diff a.txt',
+    'git add b.txt', // only this session's subagent changed it
+    'git commit -m "add a.txt and notes.txt"',
+    'git checkout -b feature',
+    'git restore --staged a.txt',
+    'git clean -n',
+    'git stash list',
+    'echo git add -A',
+    'AGENT_CHANGES_ALLOW=1 git add -A',
+  ]) {
+    allowed(command);
+  }
+});
+
+test("the command line stages and discards one session's changes only", async () => {
+  const dir = setupRepo();
+  const read = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
+  const cli = (...args: string[]) => execFileSync(process.execPath, [CLI, ...args], { cwd: dir, encoding: 'utf8' });
+  const other = { session_id: OTHER };
+  edit(dir, {}, 'a.txt', 'line 2\n', 'line two\n');
+  edit(dir, writer, 'b.txt', 'alpha\n', 'ALPHA\n');
+  edit(dir, other, 'a.txt', 'line 9\n', 'line nine\n');
+  toolCall(dir, other, 'Write', { file_path: path.join(dir, 'notes.txt'), content: 'n\n' }, () => fs.writeFileSync(path.join(dir, 'notes.txt'), 'n\n'));
+
+  assert.match(cli('status', '--session', SESSION), /a\.txt {2}\(not staged\)[\s\S]*b\.txt[\s\S]*Other agents' changes[\s\S]*a\.txt, notes\.txt/);
+  const out = cli('stage', '--session', SESSION);
+  assert.match(out, /Staged this session's changes in: .*a\.txt/);
+  assert.match(out, /Other agents' changes in a\.txt stay unstaged/);
+  assert.equal(git('show', ':a.txt'), ten.replace('line 2\n', 'line two\n'), "only this session's line is staged");
+  assert.equal(git('show', ':b.txt'), 'ALPHA\nbeta\n', "its subagent's work comes along");
+  assert.equal(git('diff', '--cached', '--name-only').trim().split('\n').sort().join(','), 'a.txt,b.txt');
+  git('commit', '-qm', 'Line two');
+  assert.equal(read('a.txt'), ten.replace('line 2\n', 'line two\n').replace('line 9\n', 'line nine\n'), "the other session's line is still there");
+
+  // The other session undoes its own work; what was committed stays.
+  assert.match(cli('discard', '--session', OTHER), /Undid this session's changes in: a\.txt, notes\.txt/);
+  assert.equal(read('a.txt'), ten.replace('line 2\n', 'line two\n'));
+  assert.equal(fs.existsSync(path.join(dir, 'notes.txt')), false);
+  assert.match(cli('status', '--session', OTHER), /no uncommitted changes/);
+  assert.equal(git('status', '--porcelain'), '');
+});
+
+test('the hook and the files it loads are copied together', () => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-changes-sync-'));
+  assert.equal(syncHookFiles(path.join(__dirname, '..', '..'), dest), true);
+  assert.equal(syncHookFiles(path.join(__dirname, '..', '..'), dest), false);
+  for (const f of [HOOK_FILE, 'guard.js', 'cli.js', 'engine/tracker.js', 'engine/model.js', 'engine/git.js']) {
+    assert.ok(fs.existsSync(path.join(dest, f)), f);
+  }
 });
 
 test('installing the hook keeps existing settings and is idempotent', () => {

@@ -142,16 +142,18 @@ export class Tracker {
   private constructor(
     readonly root: string,
     readonly gitDir: string,
+    private readonly readOnly: boolean,
   ) {
     this.store = path.join(gitDir, 'agent-changes');
   }
 
-  static async open(dir: string): Promise<Tracker | null> {
+  /** `readOnly` trackers never write state.json (the hook only looks; the extension keeps it). */
+  static async open(dir: string, { readOnly = false } = {}): Promise<Tracker | null> {
     try {
       const out = (await git(dir, ['rev-parse', '--show-toplevel', '--absolute-git-dir'])).toString('utf8');
       const [top, gitDir] = out.split(/\r?\n/);
       if (!top || !gitDir) return null;
-      return new Tracker(realpath(top), path.normalize(gitDir));
+      return new Tracker(realpath(top), path.normalize(gitDir), readOnly);
     } catch {
       return null;
     }
@@ -747,6 +749,7 @@ export class Tracker {
   }
 
   private savePersisted(p: Persisted): void {
+    if (this.readOnly) return;
     const file = path.join(this.store, 'state.json');
     fs.writeFileSync(`${file}.tmp`, JSON.stringify(p));
     fs.renameSync(`${file}.tmp`, file);

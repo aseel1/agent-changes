@@ -27,6 +27,8 @@
 
 When several Claude Code agents work in the same project, VS Code's Source Control shows all of their edits in one mixed list. **Agent Changes** sorts that list by agent. Each agent gets its own collapsible group holding only the files, and only the lines, that agent changed. From there you can review, stage, commit or discard one agent's work without touching the others.
 
+It also keeps the agents themselves from stepping on each other: when one Claude session runs a git command that would commit or throw away another session's unfinished work, Agent Changes stops the command and tells Claude how to act on its own changes only.
+
 An **agent** is a Claude Code session (one chat, in the terminal or in the VS Code extension) or a subagent that session started.
 
 ## Why
@@ -43,6 +45,7 @@ The usual answer is a separate copy of the project for each agent (a Git worktre
 - 🔍 **Only that agent's lines.** Click a file to compare the last commit with that agent's edits alone, even when other agents changed the same file.
 - ✅ **Stage, commit or discard one agent's work.** The buttons on an agent's group, or on one of its files, act on that agent's edits only. Everyone else's stay as they are. Commit with the usual message box.
 - 🧹 **Discard All.** One button on **Changes** throws away everything that isn't staged, just like Git's. What you staged is kept.
+- 🛡️ **Agents keep out of each other's work.** A session that runs `git add -A`, `git commit -a`, `git checkout .`, `git stash` or the like over another session's uncommitted changes is stopped, and told how to stage or undo only its own. [More below](#keeping-agents-out-of-each-others-work).
 - 🙋 **Nothing goes missing.** Edits no agent made (your own typing, a formatter, a build step) appear in an **Unattributed** group.
 - 🔒 **Local only.** No network, no telemetry. The record of who changed what lives in `.git/agent-changes/`, which Git never commits.
 
@@ -115,7 +118,7 @@ code --install-extension agent-changes-<version>.vsix
 <br>
 
 - Creates `.git/agent-changes/`, where all tracking data lives. It sits inside `.git`, so it is never committed.
-- Copies the hook script to `~/.claude/agent-changes/agent-changes-hook.js`.
+- Copies the hook script, and the guard and `cli.js` it uses, to `~/.claude/agent-changes/`.
 - Adds the hook to `<repo>/.claude/settings.local.json`, Claude Code's personal settings file for the project. Your existing settings are kept.
 
 The hook records nothing in repositories where `.git/agent-changes/` doesn't exist, so you can also register it once in `~/.claude/settings.json` to cover Claude sessions started from any folder.
@@ -158,6 +161,43 @@ VS Code takes folder icons from your file icon theme, so drawing a colored dot i
 - **Keep Folder Icons** leaves your theme alone. Agents then show with a regular folder icon.
 
 You can change your mind any time with the `agentChanges.agentFolderIcons` setting. Turning it off, or uninstalling the extension, puts your own theme back.
+
+## Keeping agents out of each other's work
+
+Claude Code sessions don't know about each other. A session that finishes its task and runs `git add -A` also stages whatever another session is in the middle of, and one that cleans up with `git checkout .` throws that work away.
+
+Agent Changes knows whose changes are whose, so its hook checks git commands before they run. When a command would reach another session's uncommitted changes, the hook blocks it and Claude gets the reason, for example:
+
+```text
+Agent Changes blocked this command, so none of it ran: `git add -A` would stage uncommitted
+work that another Claude session made in this folder:
+- "Fix date formatting" (another session): app.js, format.js
+
+To stage only this session's changes (only your lines, even in files the other session
+changed too), run:
+  node "~/.claude/agent-changes/cli.js" stage --session 9ff6d679-…
+then commit without -a and without file names: git commit -m "<message>"
+```
+
+In testing, Claude reads this, stages its own changes with the given command and commits only those. The other session's work stays where it was.
+
+| Blocked when it would reach another session's uncommitted changes | |
+|---|---|
+| Stage or commit them | `git add` (`-A`, `.`, folders, files), `git commit -a`, `git commit <files>` |
+| Erase them | `git checkout -- <files>`, `git checkout .`, `git restore`, `git reset --hard`, `git clean -f`, `git rm -f`, `git checkout -f`, `git switch --discard-changes` |
+| Move them out of the folder | `git stash` |
+
+It works for commands Claude runs in **Bash** and in **PowerShell**. Agents get a small command for acting on their own session's changes only:
+
+```bash
+node ~/.claude/agent-changes/cli.js status  --session <id>              # what is mine, what is others'
+node ~/.claude/agent-changes/cli.js stage   --session <id> [files...]   # stage only my lines
+node ~/.claude/agent-changes/cli.js discard --session <id> [files...]   # undo only my changes
+```
+
+- A session's **own subagents** count as part of its work, so the main session can commit what its subagents did.
+- **Unattributed** changes (yours, or other tools') aren't guarded.
+- If you do want everything in one commit, **tell Claude**. The message tells it to put `AGENT_CHANGES_ALLOW=1` in front of the command when you ask for that.
 
 ## Settings
 
@@ -210,7 +250,9 @@ Set `agentChanges.agentFolderIcons` to `false`, or pick your usual theme in **Pr
 <summary>The details, for the curious</summary>
 <br>
 
-A [Claude Code hook](https://code.claude.com/docs/en/hooks) runs before and after every `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and `Bash` call. It snapshots the affected files and appends an event to `.git/agent-changes/log.jsonl`, tagged with the session id and, for subagents, the `agent_id` and `agent_type` Claude Code passes to hooks. For `Bash`, it compares `git status` before and after the command. When the `Agent` tool finishes, its description becomes the subagent's name.
+A [Claude Code hook](https://code.claude.com/docs/en/hooks) runs before and after every `Edit`, `Write`, `MultiEdit`, `NotebookEdit`, `Bash` and `PowerShell` call. It snapshots the affected files and appends an event to `.git/agent-changes/log.jsonl`, tagged with the session id and, for subagents, the `agent_id` and `agent_type` Claude Code passes to hooks. For shell commands, it compares `git status` before and after the command. When the `Agent` tool finishes, its description becomes the subagent's name.
+
+Before a shell command that looks like one of the guarded git commands, the hook works out which files it would stage, stash or erase (asking git itself, with `--dry-run` where git has one), checks who owns the changes in them, and blocks the command with a [`deny` decision](https://code.claude.com/docs/en/hooks) if another session does. Claude Code passes the reason on to Claude.
 
 The extension replays that log into a line-level ownership model of each changed file:
 
@@ -229,6 +271,7 @@ Session renames and generated titles are written to the session transcript witho
 - **Binary files** and files over 8 MB are credited whole to their last writer.
 - Agents still **share one folder**: an agent running a build or tests sees the other agents' half-finished edits. Use worktrees when that matters.
 - VS Code sorts the agent groups **alphabetically**, not by when each agent started.
+- The git guard is a **safety net, not a lock**. It reads the usual forms of the commands above. Scripts, aliases, or tools that change files without git get through. It also protects one session's work from other sessions, not two subagents of the same session from each other.
 - This is a **preview**, tested mostly on **Windows**. macOS and Linux should work, and reports are welcome.
 
 ## Uninstall
@@ -250,6 +293,8 @@ npm run package     # builds agent-changes-<version>.vsix
 | `hook/agent-changes-hook.js` | The Claude Code hook (plain Node.js, no dependencies) |
 | `src/engine/` | Log replay, the line ownership model, Git plumbing, hook installation |
 | `src/extension.ts` | The Source Control view, commands and decorations |
+| `src/guard.ts` | The check the hook runs before git commands |
+| `src/cli.ts` | The command agents run to stage or undo only their own changes |
 | `src/iconTheme.ts` | The icon theme copy that draws the agent dots |
 
 Issues and pull requests are welcome.

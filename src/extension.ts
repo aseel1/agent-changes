@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { hookDestination, installHookSettings, syncHookScript } from './engine/install';
+import { hookDestination, installHookSettings, syncHookFiles } from './engine/install';
 import { toDisplay } from './engine/lines';
 import { FileEntry, OwnerInfo, Snapshot, StagedConflict, StagedItem, Tracker } from './engine/tracker';
 import { AGENT_FOLDER_MARK, AgentIconTheme, DotColor } from './iconTheme';
@@ -396,7 +396,6 @@ export async function activate(context: vscode.ExtensionContext) {
   const iconTheme = new AgentIconTheme(context, (line) => output.appendLine(line));
   const manager = new Manager((folders) => iconTheme.setFolders(folders));
   const decorations = new AgentDecorations();
-  const hookSource = context.asAbsolutePath(path.join('hook', 'agent-changes-hook.js'));
   context.subscriptions.push(
     output,
     manager,
@@ -413,9 +412,9 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
   );
 
-  // Keep an already-installed hook script in step with this version of the extension.
+  // Keep an already-installed hook (and the guard and helpers it loads) in step with this version.
   try {
-    if (fs.existsSync(hookDestination())) syncHookScript(hookSource);
+    if (fs.existsSync(hookDestination())) syncHookFiles(context.extensionPath);
   } catch (e) {
     output.appendLine(`could not update hook script: ${e}`);
   }
@@ -599,7 +598,7 @@ export async function activate(context: vscode.ExtensionContext) {
       tracker = pick.t;
     }
     tracker.enable();
-    syncHookScript(hookSource);
+    syncHookFiles(context.extensionPath);
     const { file: settingsFile } = installHookSettings(tracker.root);
     if (!manager.views.has(tracker.root)) manager.add(tracker, tracker.folder ?? tracker.root);
     void vscode.window.showInformationMessage(

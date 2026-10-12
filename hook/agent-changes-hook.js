@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Agent Changes: Claude Code hook that records which agent changed which file.
 //
-// Registered for PreToolUse / PostToolUse / PostToolUseFailure (file tools, Bash, Agent),
-// and UserPromptSubmit / SessionStart / Stop / SessionEnd (session names). It only records
-// in repositories where <git-dir>/agent-changes/ exists (created by "Agent Changes: Enable
-// for This Repository"), and it never blocks or changes a tool call: it prints nothing and
-// always exits 0.
+// Registered for PreToolUse / PostToolUse / PostToolUseFailure (file tools, Bash, PowerShell,
+// Agent), and UserPromptSubmit / SessionStart / Stop / SessionEnd (session names). It only
+// acts in repositories where <git-dir>/agent-changes/ exists (created by "Agent Changes:
+// Enable for This Repository") and always exits 0. It blocks one thing: a git command that
+// would stage, stash or erase another Claude session's uncommitted work (see guard.js, copied
+// next to this script). Otherwise it prints nothing and changes no tool call.
 'use strict';
 
 const fs = require('fs');
@@ -14,12 +15,15 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
 const AGENT_TOOLS = new Set(['Agent', 'Task']);
 const MAX_BLOB = 8 * 1024 * 1024;
 const MAX_DIRTY = 5000;
 const PENDING_TTL_MS = 6 * 60 * 60 * 1000;
 
 let storeForErrors = null;
+/** What the hook answers Claude Code, if anything (only a blocked command does). */
+let reply = null;
 
 function main(input) {
   const event = input.hook_event_name;
@@ -34,8 +38,34 @@ function main(input) {
 
   const tool = input.tool_name;
   if (FILE_TOOLS.has(tool)) return isPre ? preFile(input) : postFile(input);
-  if (tool === 'Bash') return isPre ? preBash(input) : postBash(input);
+  if (SHELL_TOOLS.has(tool)) return isPre ? preShell(input) : postBash(input);
   if (AGENT_TOOLS.has(tool) && isPost) return onAgent(input);
+}
+
+// ---------------------------------------------------------------- guard
+
+async function preShell(input) {
+  let reason = null;
+  try {
+    reason = await guard(input);
+  } catch (e) {
+    logError(e); // a broken guard lets commands through
+  }
+  if (!reason) return preBash(input);
+  // The command won't run, so there is nothing to record (and no pending entry to leave behind).
+  reply = { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } };
+}
+
+// Commands that can't be one of the guarded git commands never load the guard.
+const MAYBE_RISKY = /\bgit\b[\s\S]*\b(add|commit|stash|reset|checkout|switch|restore|clean|rm)\b/;
+
+async function guard(input) {
+  const command = String((input.tool_input && input.tool_input.command) || '');
+  if (!MAYBE_RISKY.test(command) || !findRepo(input.cwd || process.cwd())) return null;
+  const file = path.join(__dirname, 'guard.js');
+  if (!fs.existsSync(file)) return null;
+  const shell = input.tool_name === 'PowerShell' ? 'powershell' : 'bash';
+  return require(file).check(command, input.cwd || process.cwd(), input.session_id || '', path.join(__dirname, 'cli.js'), shell);
 }
 
 // ---------------------------------------------------------------- file tools
@@ -146,7 +176,7 @@ function postBash(input) {
       v: 1,
       t: Date.now(),
       kind: 'bash',
-      tool: 'Bash',
+      tool: input.tool_name,
       ...who(input),
       file: rel,
       before,
@@ -519,23 +549,24 @@ function removeFile(p) {
   } catch {}
 }
 
+function logError(e) {
+  if (!storeForErrors) return;
+  try {
+    fs.appendFileSync(path.join(storeForErrors, 'hook-errors.log'), `${new Date().toISOString()} ${(e && e.stack) || e}\n`);
+  } catch {}
+}
+
 // ---------------------------------------------------------------- entry
 
 let raw = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => (raw += chunk));
-process.stdin.on('end', () => {
+process.stdin.on('end', async () => {
   try {
-    main(JSON.parse(raw));
+    await main(JSON.parse(raw));
   } catch (e) {
-    if (storeForErrors) {
-      try {
-        fs.appendFileSync(
-          path.join(storeForErrors, 'hook-errors.log'),
-          `${new Date().toISOString()} ${(e && e.stack) || e}\n`,
-        );
-      } catch {}
-    }
+    logError(e);
   }
-  process.exit(0);
+  if (reply) process.stdout.write(JSON.stringify(reply), () => process.exit(0));
+  else process.exit(0);
 });
